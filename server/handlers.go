@@ -1,13 +1,18 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/trapck/kr.api/model"
 
 	"github.com/gofiber/fiber"
 	uuid "github.com/satori/go.uuid"
+	"github.com/xeipuuv/gojsonschema"
 )
+
+var identityJSONSchema = gojsonschema.NewReferenceLoader("file:///home/trapck/Desktop/krapi/model/schema.json")
 
 //HandleList handles list all identities request
 func (a *IdentApp) HandleList(c *fiber.Ctx) {
@@ -21,10 +26,8 @@ func (a *IdentApp) HandleList(c *fiber.Ctx) {
 
 //HandleGet handles get identitiy request
 func (a *IdentApp) HandleGet(c *fiber.Ctx) {
-	id := c.Params("id")
-	_, err := uuid.FromString(id)
-	if err != nil {
-		writeError(c, http.StatusBadRequest, err)
+	id, valid := extractIDParam(c)
+	if !valid {
 		return
 	}
 	i, err := a.store.Get(id)
@@ -37,13 +40,11 @@ func (a *IdentApp) HandleGet(c *fiber.Ctx) {
 
 //HandleDelete handles delete identitiy request
 func (a *IdentApp) HandleDelete(c *fiber.Ctx) {
-	id := c.Params("id")
-	_, err := uuid.FromString(id)
-	if err != nil {
-		writeError(c, http.StatusBadRequest, err)
+	id, valid := extractIDParam(c)
+	if !valid {
 		return
 	}
-	err = a.store.Delete(id)
+	err := a.store.Delete(id)
 	if err != nil {
 		writeError(c, a.statusFromDBErr(err), err)
 		return
@@ -54,13 +55,10 @@ func (a *IdentApp) HandleDelete(c *fiber.Ctx) {
 //HandleCreate handles create identitiy request
 func (a *IdentApp) HandleCreate(c *fiber.Ctx) {
 	var i model.Identity
-	err := c.BodyParser(&i)
-	//TODO: validate json struct
-	if err != nil {
-		writeError(c, http.StatusBadRequest, err)
+	if !parseIdentity(c, &i) {
 		return
 	}
-	i, err = a.store.Create(i)
+	i, err := a.store.Create(i)
 	if err != nil {
 		writeError(c, a.statusFromDBErr(err), err)
 		return
@@ -70,20 +68,15 @@ func (a *IdentApp) HandleCreate(c *fiber.Ctx) {
 
 //HandleUpdate handles update identitiy request
 func (a *IdentApp) HandleUpdate(c *fiber.Ctx) {
-	id := c.Params("id")
-	_, err := uuid.FromString(id)
-	if err != nil {
-		writeError(c, http.StatusBadRequest, err)
+	id, valid := extractIDParam(c)
+	if !valid {
 		return
 	}
 	var i model.Identity
-	err = c.BodyParser(&i)
-	//TODO: validate json struct
-	if err != nil {
-		writeError(c, http.StatusBadRequest, err)
+	if !parseIdentity(c, &i) {
 		return
 	}
-	i, err = a.store.Update(id, i)
+	i, err := a.store.Update(id, i)
 	if err != nil {
 		writeError(c, a.statusFromDBErr(err), err)
 		return
@@ -106,4 +99,42 @@ func (a *IdentApp) statusFromDBErr(e error) int {
 		return http.StatusNotFound
 	}
 	return http.StatusInternalServerError
+}
+
+func validateIdentityJSON(src string) (*gojsonschema.Result, error) {
+	return gojsonschema.Validate(identityJSONSchema, gojsonschema.NewStringLoader(src))
+}
+
+func combineJSONSchemaErrors(e []gojsonschema.ResultError) error {
+	s := make([]string, len(e))
+	for i, v := range e {
+		s[i] = v.String()
+	}
+	return fmt.Errorf(strings.Join(s, "\n"))
+}
+
+func parseIdentity(c *fiber.Ctx, i *model.Identity) bool {
+	r, err := validateIdentityJSON(c.Body())
+	if err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return false
+	} else if !r.Valid() {
+		writeError(c, http.StatusUnprocessableEntity, combineJSONSchemaErrors(r.Errors()))
+		return false
+	}
+	if err != c.BodyParser(&i) {
+		writeError(c, http.StatusBadRequest, err)
+		return false
+	}
+	return true
+}
+
+func extractIDParam(c *fiber.Ctx) (string, bool) {
+	id := c.Params("id")
+	_, err := uuid.FromString(id)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, err)
+		return id, false
+	}
+	return id, true
 }

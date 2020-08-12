@@ -1,0 +1,27 @@
+{
+    "type": "object",
+    "title": "The root identity schema",
+    "default": {},
+    "examples": [
+        {
+            "id": "ae0c2058-1fa0-41f8-8efc-8a43ccf671ef"
+        }
+    ],
+    "required": [
+        "id"
+    ],
+    "properties": {
+        "id": {
+            "$id": "#/properties/id",
+			"type": "string",
+			"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+			"title": "identity id",
+            "description": "identity id",
+            "default": "",
+            "examples": [
+                "ae0c2058-1fa0-41f8-8efc-8a43ccf671ef"
+            ]
+        }
+    },
+    "additionalProperties": true
+}
