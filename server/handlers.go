@@ -13,7 +13,7 @@ import (
 func (a *IdentApp) HandleList(c *fiber.Ctx) {
 	l, err := a.store.List()
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err)
+		writeError(c, a.statusFromDBErr(err), err)
 		return
 	}
 	writeSuccess(c, http.StatusOK, l)
@@ -29,7 +29,7 @@ func (a *IdentApp) HandleGet(c *fiber.Ctx) {
 	}
 	i, err := a.store.Get(id)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err)
+		writeError(c, a.statusFromDBErr(err), err)
 		return
 	}
 	writeSuccess(c, http.StatusOK, i)
@@ -45,7 +45,7 @@ func (a *IdentApp) HandleDelete(c *fiber.Ctx) {
 	}
 	err = a.store.Delete(id)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err)
+		writeError(c, a.statusFromDBErr(err), err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -62,7 +62,7 @@ func (a *IdentApp) HandleCreate(c *fiber.Ctx) {
 	}
 	i, err = a.store.Create(i)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err)
+		writeError(c, a.statusFromDBErr(err), err)
 		return
 	}
 	writeSuccess(c, http.StatusCreated, i)
@@ -85,7 +85,7 @@ func (a *IdentApp) HandleUpdate(c *fiber.Ctx) {
 	}
 	i, err = a.store.Update(id, i)
 	if err != nil {
-		writeError(c, http.StatusInternalServerError, err)
+		writeError(c, a.statusFromDBErr(err), err)
 		return
 	}
 	writeSuccess(c, http.StatusOK, i)
@@ -99,4 +99,11 @@ func writeSuccess(c *fiber.Ctx, code int, data interface{}) {
 func writeError(c *fiber.Ctx, code int, e error) {
 	c.JSON(model.NewGenericErrorWrap(code, e))
 	c.Status(code)
+}
+
+func (a *IdentApp) statusFromDBErr(e error) int {
+	if a.store.NoRows(e) {
+		return http.StatusNotFound
+	}
+	return http.StatusInternalServerError
 }

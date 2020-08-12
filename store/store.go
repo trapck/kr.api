@@ -39,11 +39,11 @@ func (s *PostgresStore) List() ([]model.Identity, error) {
 		return nil, e
 	}
 	e = s.db.Select(&verifiableAddresses, "SELECT * FROM verifiable_address")
-	if e != nil {
+	if e != nil && !s.NoRows(e) {
 		return nil, e
 	}
 	e = s.db.Select(&recoveryAddresses, "SELECT * FROM recovery_address")
-	if e != nil {
+	if e != nil && !s.NoRows(e) {
 		return nil, e
 	}
 	return s.mapIdentityEntities(identities, verifiableAddresses, recoveryAddresses), nil
@@ -58,13 +58,13 @@ func (s *PostgresStore) Get(id string) (model.Identity, error) {
 	}
 	va := []model.VerifiableAddress{}
 	e = s.db.Select(&va, "SELECT * FROM verifiable_address WHERE identity=$1", id)
-	if e != nil {
+	if e != nil && !s.NoRows(e) {
 		return identitiy, e
 	}
 	identitiy.VerifiableAddresses = va
 	ra := []model.RecoveryAddress{}
 	e = s.db.Select(&ra, "SELECT * FROM recovery_address WHERE identity=$1", id)
-	if e != nil {
+	if e != nil && !s.NoRows(e) {
 		return identitiy, e
 	}
 	identitiy.RecoveryAddresses = ra
@@ -127,13 +127,21 @@ func (s *PostgresStore) Delete(id string) error {
 		t.Rollback()
 		return e
 	}
-	_, e = t.Exec("DELETE FROM identity WHERE id = $1", id)
+	r, e := t.Exec("DELETE FROM identity WHERE id = $1", id)
+	if cnt, _ := r.RowsAffected(); e == nil && cnt == 0 {
+		e = sql.ErrNoRows
+	}
 	if e != nil {
 		t.Rollback()
 		return e
 	}
 	t.Commit()
 	return nil
+}
+
+//NoRows returns whether error is no rows error
+func (s *PostgresStore) NoRows(e error) bool {
+	return e == sql.ErrNoRows
 }
 
 func (s *PostgresStore) ensureConnection() (isConnected bool, e error) {
