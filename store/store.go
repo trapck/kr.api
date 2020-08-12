@@ -73,70 +73,87 @@ func (s *PostgresStore) Get(id string) (model.Identity, error) {
 
 // Create inserts identity
 func (s *PostgresStore) Create(i model.Identity) (model.Identity, error) {
-	t, e := s.db.Begin()
-	if e != nil {
-		return i, e
-	}
-	e = s.insertIdentity(t, i)
-	if e != nil {
+	t, e := s.createTx(&i, nil)
+	if e != nil && t != nil {
 		t.Rollback()
 		return i, e
 	}
+	return i, t.Commit()
+}
+
+func (s *PostgresStore) createTx(i *model.Identity, existingTx *sql.Tx) (*sql.Tx, error) {
+	var e error
+	if existingTx == nil {
+		existingTx, e = s.db.Begin()
+	}
+	if e != nil {
+		return existingTx, e
+	}
+	e = s.insertIdentity(existingTx, *i)
+	if e != nil {
+		return existingTx, e
+	}
 	if len(i.RecoveryAddresses) > 0 {
-		e = s.insertRecoveryAddresses(t, i.ID, i.RecoveryAddresses)
+		e = s.insertRecoveryAddresses(existingTx, i.ID, i.RecoveryAddresses)
 		if e != nil {
-			t.Rollback()
-			return i, e
+			return existingTx, e
 		}
 	}
 
 	if len(i.VerifiableAddresses) > 0 {
-		e = s.insertVerifiableAddresses(t, i.ID, i.VerifiableAddresses)
+		e = s.insertVerifiableAddresses(existingTx, i.ID, i.VerifiableAddresses)
 		if e != nil {
-			t.Rollback()
-			return i, e
+			return existingTx, e
 		}
 	}
-	t.Commit()
-	return i, nil
+	return existingTx, nil
 }
 
 // Update updates identity
 func (s *PostgresStore) Update(id string, i model.Identity) (model.Identity, error) {
-	e := s.Delete(id)
-	if e != nil {
-		return i, e
-	}
-	//TODO: wrap delete and insert into single transaction
-	return s.Create(i)
+	return i, s.execTxChain(
+		func(t *sql.Tx) error {
+			_, e := s.deleteTx(id, t)
+			return e
+		}, func(t *sql.Tx) error {
+			_, e := s.createTx(&i, t)
+			return e
+		},
+	)
 }
 
 //Delete deletes identity
 func (s *PostgresStore) Delete(id string) error {
-	t, e := s.db.Begin()
-	if e != nil {
-		return e
-	}
-	_, e = t.Exec("DELETE FROM verifiable_address WHERE identity = $1", id)
-	if e != nil {
+	t, e := s.deleteTx(id, nil)
+	if e != nil && t != nil {
 		t.Rollback()
 		return e
 	}
-	_, e = t.Exec("DELETE FROM recovery_address WHERE identity = $1", id)
-	if e != nil {
-		t.Rollback()
-		return e
+	return t.Commit()
+}
+
+//Delete deletes identity
+func (s *PostgresStore) deleteTx(id string, existingTx *sql.Tx) (*sql.Tx, error) {
+	var e error
+	if existingTx == nil {
+		existingTx, e = s.db.Begin()
 	}
-	r, e := t.Exec("DELETE FROM identity WHERE id = $1", id)
+	if e != nil {
+		return existingTx, e
+	}
+	_, e = existingTx.Exec("DELETE FROM verifiable_address WHERE identity = $1", id)
+	if e != nil {
+		return existingTx, e
+	}
+	_, e = existingTx.Exec("DELETE FROM recovery_address WHERE identity = $1", id)
+	if e != nil {
+		return existingTx, e
+	}
+	r, e := existingTx.Exec("DELETE FROM identity WHERE id = $1", id)
 	if cnt, _ := r.RowsAffected(); e == nil && cnt == 0 {
 		e = sql.ErrNoRows
 	}
-	if e != nil {
-		t.Rollback()
-		return e
-	}
-	t.Commit()
-	return nil
+	return existingTx, e
 }
 
 //NoRows returns whether error is no rows error
@@ -228,4 +245,18 @@ func (s *PostgresStore) mapIdentityEntities(identities []model.Identity, verifia
 		}
 	}
 	return result
+}
+
+func (s *PostgresStore) execTxChain(operations ...func(*sql.Tx) error) error {
+	t, e := s.db.Begin()
+	if e != nil {
+		return e
+	}
+	for _, op := range operations {
+		if e = op(t); e != nil {
+			t.Rollback()
+			return e
+		}
+	}
+	return t.Commit()
 }
