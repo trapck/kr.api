@@ -130,6 +130,12 @@ func TestCreate(t *testing.T) {
 		resp, _ := srv.server.Test(req)
 		assertErrorJSONResponse(t, http.StatusBadRequest, resp)
 	})
+	t.Run("should return 422 for json schema mismatch", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, "/identities", bytes.NewBuffer([]byte("{}")))
+		req.Header.Set(HeaderKeyContentType, HeaderValueJSONContactType)
+		resp, _ := srv.server.Test(req)
+		assertErrorJSONResponse(t, http.StatusUnprocessableEntity, resp)
+	})
 }
 
 func TestUpdate(t *testing.T) {
@@ -162,6 +168,12 @@ func TestUpdate(t *testing.T) {
 		req.Header.Set(HeaderKeyContentType, HeaderValueJSONContactType)
 		resp, _ := srv.server.Test(req)
 		assertErrorJSONResponse(t, http.StatusBadRequest, resp)
+	})
+	t.Run("should return 422 for json schema mismatch", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPut, "/identities/"+existingID, bytes.NewBuffer([]byte("{}")))
+		req.Header.Set(HeaderKeyContentType, HeaderValueJSONContactType)
+		resp, _ := srv.server.Test(req)
+		assertErrorJSONResponse(t, http.StatusUnprocessableEntity, resp)
 	})
 	t.Run("should return not found for not existing id", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPut, "/identities/"+uuid.NewV4().String(), bytes.NewBuffer(serializedIdentity))
