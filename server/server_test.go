@@ -15,6 +15,8 @@ import (
 	"github.com/trapck/kr.api/testutil"
 )
 
+const notFound = "not found"
+
 type stubStore struct {
 	identities []model.Identity
 }
@@ -25,7 +27,7 @@ func (s *stubStore) List() ([]model.Identity, error) {
 
 func (s *stubStore) Get(id string) (model.Identity, error) {
 	var r model.Identity
-	e := fmt.Errorf("not found")
+	e := fmt.Errorf(notFound)
 	for _, v := range s.identities {
 		if v.ID == id {
 			r = v
@@ -51,7 +53,7 @@ func (s *stubStore) Update(id string, i model.Identity) (model.Identity, error) 
 
 func (s *stubStore) Delete(id string) error {
 	var pos int
-	e := fmt.Errorf("not found")
+	e := fmt.Errorf(notFound)
 	for i, v := range s.identities {
 		if v.ID == id {
 			pos = i
@@ -64,6 +66,10 @@ func (s *stubStore) Delete(id string) error {
 	}
 	s.identities = append(s.identities[:pos], s.identities[pos+1:]...)
 	return nil
+}
+
+func (s *stubStore) NoRows(e error) bool {
+	return e.Error() == notFound
 }
 
 func TestList(t *testing.T) {
@@ -94,10 +100,10 @@ func TestGet(t *testing.T) {
 		resp, _ := srv.server.Test(req)
 		assertErrorJSONResponse(t, http.StatusBadRequest, resp)
 	})
-	t.Run("should return error for not existing id", func(t *testing.T) {
+	t.Run("should return not found for not existing id", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/identities/"+uuid.NewV4().String(), nil)
 		resp, _ := srv.server.Test(req)
-		assertErrorJSONResponse(t, http.StatusInternalServerError, resp)
+		assertErrorJSONResponse(t, http.StatusNotFound, resp)
 	})
 }
 
@@ -157,11 +163,11 @@ func TestUpdate(t *testing.T) {
 		resp, _ := srv.server.Test(req)
 		assertErrorJSONResponse(t, http.StatusBadRequest, resp)
 	})
-	t.Run("should return error for not existing id", func(t *testing.T) {
+	t.Run("should return not found for not existing id", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPut, "/identities/"+uuid.NewV4().String(), bytes.NewBuffer(serializedIdentity))
 		req.Header.Set(HeaderKeyContentType, HeaderValueJSONContactType)
 		resp, _ := srv.server.Test(req)
-		assertErrorJSONResponse(t, http.StatusInternalServerError, resp)
+		assertErrorJSONResponse(t, http.StatusNotFound, resp)
 	})
 }
 
@@ -182,10 +188,10 @@ func TestDelete(t *testing.T) {
 		resp, _ := srv.server.Test(req)
 		assertErrorJSONResponse(t, http.StatusBadRequest, resp)
 	})
-	t.Run("should return error for not existing id", func(t *testing.T) {
+	t.Run("should return not found for not existing id", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodDelete, "/identities/"+uuid.NewV4().String(), nil)
 		resp, _ := srv.server.Test(req)
-		assertErrorJSONResponse(t, http.StatusInternalServerError, resp)
+		assertErrorJSONResponse(t, http.StatusNotFound, resp)
 	})
 }
 

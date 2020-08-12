@@ -12,6 +12,7 @@ type Store interface {
 	Get(id string) (model.Identity, error)
 	Update(id string, i model.Identity) (model.Identity, error)
 	Delete(id string) error
+	NoRows(e error) bool
 }
 
 //IdentApp is an application to serve identities
