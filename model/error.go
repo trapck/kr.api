@@ -2,12 +2,12 @@ package model
 
 //GenericError is model of an generic error
 type GenericError struct {
-	Code    int
-	Debug   string
-	Message string
-	Reason  string
-	Request string
-	status  string
+	Code    int    `json:"code"`
+	Debug   string `json:"debug"`
+	Message string `json:"message"`
+	Reason  string `json:"reason"`
+	Request string `json:"request"`
+	Status  string `json:"status"`
 }
 
 //GenericErrorWrap is model for generic erorr http wrap

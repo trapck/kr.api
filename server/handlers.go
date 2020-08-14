@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/trapck/kr.api/appconfig"
 	"github.com/trapck/kr.api/model"
 
 	"github.com/gofiber/fiber"
@@ -12,7 +13,7 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-var identityJSONSchema = gojsonschema.NewReferenceLoader("file:///home/trapck/Desktop/krapi/model/schema.json")
+var identityJSONSchema = gojsonschema.NewReferenceLoader(appconfig.IdentityJSONSchemaPath)
 
 //HandleList handles list all identities request
 func (a *IdentApp) HandleList(c *fiber.Ctx) {
