@@ -1,4 +1,4 @@
-package store
+package postgresstore
 
 import (
 	"database/sql"
@@ -6,23 +6,24 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // db driver
+	"github.com/trapck/kr.api/appconfig"
 	"github.com/trapck/kr.api/model"
 )
 
-//PostgresStore is postgres storage implementation
-type PostgresStore struct {
+//Store is postgres storage implementation
+type Store struct {
 	db *sqlx.DB
 }
 
 // Init initializes connetion
-func (s *PostgresStore) Init() error {
-	db, e := sqlx.Connect("postgres", "user=postgres password=postgres dbname=postgres sslmode=disable")
+func (s *Store) Init() error {
+	db, e := sqlx.Connect(appconfig.PostgresDriver, appconfig.PostgresConnStr)
 	s.db = db
 	return e
 }
 
 // Close closes connetion
-func (s *PostgresStore) Close() error {
+func (s *Store) Close() error {
 	if success, e := s.ensureConnection(); !success {
 		return e
 	}
@@ -30,7 +31,7 @@ func (s *PostgresStore) Close() error {
 }
 
 // List returns all identities
-func (s *PostgresStore) List() ([]model.Identity, error) {
+func (s *Store) List() ([]model.Identity, error) {
 	verifiableAddresses := []model.VerifiableAddress{}
 	recoveryAddresses := []model.RecoveryAddress{}
 	identities := []model.Identity{}
@@ -50,7 +51,7 @@ func (s *PostgresStore) List() ([]model.Identity, error) {
 }
 
 // Get returns all identities
-func (s *PostgresStore) Get(id string) (model.Identity, error) {
+func (s *Store) Get(id string) (model.Identity, error) {
 	identitiy := model.Identity{}
 	e := s.db.Get(&identitiy, "SELECT * FROM identity WHERE id = $1", id)
 	if e != nil {
@@ -72,16 +73,17 @@ func (s *PostgresStore) Get(id string) (model.Identity, error) {
 }
 
 // Create inserts identity
-func (s *PostgresStore) Create(i model.Identity) (model.Identity, error) {
+func (s *Store) Create(i model.Identity) (model.Identity, error) {
 	t, e := s.createTx(&i, nil)
 	if e != nil && t != nil {
 		t.Rollback()
 		return i, e
 	}
+
 	return i, t.Commit()
 }
 
-func (s *PostgresStore) createTx(i *model.Identity, existingTx *sql.Tx) (*sql.Tx, error) {
+func (s *Store) createTx(i *model.Identity, existingTx *sql.Tx) (*sql.Tx, error) {
 	var e error
 	if existingTx == nil {
 		existingTx, e = s.db.Begin()
@@ -110,7 +112,7 @@ func (s *PostgresStore) createTx(i *model.Identity, existingTx *sql.Tx) (*sql.Tx
 }
 
 // Update updates identity
-func (s *PostgresStore) Update(id string, i model.Identity) (model.Identity, error) {
+func (s *Store) Update(id string, i model.Identity) (model.Identity, error) {
 	return i, s.execTxChain(
 		func(t *sql.Tx) error {
 			_, e := s.deleteTx(id, t)
@@ -123,7 +125,7 @@ func (s *PostgresStore) Update(id string, i model.Identity) (model.Identity, err
 }
 
 //Delete deletes identity
-func (s *PostgresStore) Delete(id string) error {
+func (s *Store) Delete(id string) error {
 	t, e := s.deleteTx(id, nil)
 	if e != nil && t != nil {
 		t.Rollback()
@@ -133,7 +135,7 @@ func (s *PostgresStore) Delete(id string) error {
 }
 
 //Delete deletes identity
-func (s *PostgresStore) deleteTx(id string, existingTx *sql.Tx) (*sql.Tx, error) {
+func (s *Store) deleteTx(id string, existingTx *sql.Tx) (*sql.Tx, error) {
 	var e error
 	if existingTx == nil {
 		existingTx, e = s.db.Begin()
@@ -157,11 +159,11 @@ func (s *PostgresStore) deleteTx(id string, existingTx *sql.Tx) (*sql.Tx, error)
 }
 
 //NoRows returns whether error is no rows error
-func (s *PostgresStore) NoRows(e error) bool {
+func (s *Store) NoRows(e error) bool {
 	return e == sql.ErrNoRows
 }
 
-func (s *PostgresStore) ensureConnection() (isConnected bool, e error) {
+func (s *Store) ensureConnection() (isConnected bool, e error) {
 	isConnected = s.db != nil
 	if !isConnected {
 		e = fmt.Errorf("db connection is not initialized")
@@ -169,12 +171,12 @@ func (s *PostgresStore) ensureConnection() (isConnected bool, e error) {
 	return
 }
 
-func (s *PostgresStore) insertIdentity(t *sql.Tx, i model.Identity) error {
+func (s *Store) insertIdentity(t *sql.Tx, i model.Identity) error {
 	_, e := t.Exec("INSERT INTO identity (id, schema_id, schema_url) VALUES ($1, $2, $3)", i.ID, i.SchemaID, i.SchemaURL)
 	return e
 }
 
-func (s *PostgresStore) insertRecoveryAddresses(t *sql.Tx, identity string, a []model.RecoveryAddress) error {
+func (s *Store) insertRecoveryAddresses(t *sql.Tx, identity string, a []model.RecoveryAddress) error {
 	cnt := len(a)
 	q := "INSERT INTO recovery_address (id, value, via, identity) VALUES "
 	p := []interface{}{}
@@ -190,7 +192,7 @@ func (s *PostgresStore) insertRecoveryAddresses(t *sql.Tx, identity string, a []
 	return e
 }
 
-func (s *PostgresStore) insertVerifiableAddresses(t *sql.Tx, identity string, a []model.VerifiableAddress) error {
+func (s *Store) insertVerifiableAddresses(t *sql.Tx, identity string, a []model.VerifiableAddress) error {
 	cnt := len(a)
 	q := "INSERT INTO verifiable_address (id, value, via, verified, verified_at, expires_at, identity) VALUES "
 	p := []interface{}{}
@@ -206,7 +208,7 @@ func (s *PostgresStore) insertVerifiableAddresses(t *sql.Tx, identity string, a 
 	return e
 }
 
-func (s *PostgresStore) findIdentity(id string, identities []model.Identity) (model.Identity, error) {
+func (s *Store) findIdentity(id string, identities []model.Identity) (model.Identity, error) {
 	for _, i := range identities {
 		if i.ID == id {
 			return i, nil
@@ -215,7 +217,7 @@ func (s *PostgresStore) findIdentity(id string, identities []model.Identity) (mo
 	return model.Identity{}, fmt.Errorf("not found")
 }
 
-func (s *PostgresStore) mapIdentityEntities(identities []model.Identity, verifiableAddresses []model.VerifiableAddress, recoveryAddresses []model.RecoveryAddress) []model.Identity {
+func (s *Store) mapIdentityEntities(identities []model.Identity, verifiableAddresses []model.VerifiableAddress, recoveryAddresses []model.RecoveryAddress) []model.Identity {
 	iMap := map[string]model.Identity{}
 	for _, a := range verifiableAddresses {
 		_, ok := iMap[a.Identity]
@@ -247,7 +249,7 @@ func (s *PostgresStore) mapIdentityEntities(identities []model.Identity, verifia
 	return result
 }
 
-func (s *PostgresStore) execTxChain(operations ...func(*sql.Tx) error) error {
+func (s *Store) execTxChain(operations ...func(*sql.Tx) error) error {
 	t, e := s.db.Begin()
 	if e != nil {
 		return e

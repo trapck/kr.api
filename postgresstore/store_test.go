@@ -1,6 +1,7 @@
-package store
+package postgresstore
 
 import (
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -106,9 +107,9 @@ func TestDelete(t *testing.T) {
 	assert.Error(t, err, "expected identity to be not found in db")
 }
 
-func initDB(t *testing.T) *PostgresStore {
+func initDB(t *testing.T) *Store {
 	t.Helper()
-	db := PostgresStore{}
+	db := Store{}
 	err := db.Init()
 	if err != nil {
 		assert.FailNow(t, "db connection was not established. ", err)
@@ -116,7 +117,7 @@ func initDB(t *testing.T) *PostgresStore {
 	return &db
 }
 
-func closeDB(t *testing.T, db *PostgresStore) {
+func closeDB(t *testing.T, db *Store) {
 	t.Helper()
 	err := db.Close()
 	if err != nil {
@@ -124,16 +125,16 @@ func closeDB(t *testing.T, db *PostgresStore) {
 	}
 }
 
-func clearTestData(db *PostgresStore, table, filter string) {
-	db.db.Exec(fmt.Sprintf("DELETE FROM %s WHERE %s", table, filter))
+func clearTestData(db *Store, table, filter string) (sql.Result, error) {
+	return db.db.Exec(fmt.Sprintf("DELETE FROM %s WHERE %s", table, filter))
 }
 
 func createSessionID() string {
 	return strconv.Itoa(int(rand.Uint32()))
 }
 
-func clearAllTestData(db *PostgresStore, sessionID string) {
-	clearTestData(db, "identity", fmt.Sprintf("schema_id='%s'", sessionID))
+func clearAllTestData(db *Store, sessionID string) {
 	clearTestData(db, "recovery_address", fmt.Sprintf("value='%s'", sessionID))
 	clearTestData(db, "verifiable_address", fmt.Sprintf("value='%s'", sessionID))
+	clearTestData(db, "identity", fmt.Sprintf("schema_id='%s'", sessionID))
 }
